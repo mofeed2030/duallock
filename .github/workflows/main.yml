@@ -51,6 +51,19 @@ jobs:
         run: |
           printf 'buildscript {\n    ext.kotlin_version = "1.9.0"\n    repositories { google()\n        mavenCentral() }\n    dependencies {\n        classpath "com.android.tools.build:gradle:8.1.0"\n        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"\n    }\n}\nallprojects { repositories { google()\n    mavenCentral() } }' > android/build.gradle
 
+      - name: Fix settings.gradle
+        run: |
+          printf 'include ":app"\n\ndef localPropertiesFile = new File(rootProject.projectDir, "local.properties")\ndef properties = new Properties()\n\nassert localPropertiesFile.exists()\nlocalPropertiesFile.withReader("UTF-8") { reader -> properties.load(reader) }\n\ndef flutterSdkPath = properties.getProperty("flutter.sdk")\nassert flutterSdkPath != null, "flutter.sdk not set in local.properties"\napply from: "$flutterSdkPath/packages/flutter_tools/gradle/app_plugin_loader.gradle"' > android/settings.gradle
+
+      - name: Fix gradle wrapper
+        run: |
+          mkdir -p android/gradle/wrapper
+          printf 'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.0-all.zip\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists' > android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Fix gradle properties
+        run: |
+          printf 'org.gradle.jvmargs=-Xmx4G\nandroid.useAndroidX=true\nandroid.enableJetifier=true' > android/gradle.properties
+
       - name: Get dependencies
         run: flutter pub get
 
