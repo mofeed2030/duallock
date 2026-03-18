@@ -26,7 +26,7 @@ jobs:
         with:
           flutter-version: '3.19.0'
 
-      - name: Fix pubspec
+      - name: Fix pubspec - remove problematic packages
         run: |
           sed -i '/firebase_core/d' pubspec.yaml
           sed -i '/firebase_auth/d' pubspec.yaml
@@ -35,6 +35,109 @@ jobs:
           sed -i '/installed_apps/d' pubspec.yaml
           sed -i '/local_auth/d' pubspec.yaml
           sed -i '/photo_manager/d' pubspec.yaml
+          sed -i '/flutter_secure_storage/d' pubspec.yaml
+
+      - name: Fix Android files
+        run: |
+          mkdir -p android/app/src/main/java/com/duallock/app
+
+          cat > android/app/src/main/java/com/duallock/app/MainActivity.kt << 'KOTLINEOF'
+package com.duallock.app
+import io.flutter.embedding.android.FlutterActivity
+class MainActivity: FlutterActivity()
+KOTLINEOF
+
+          cat > android/app/src/main/AndroidManifest.xml << 'XMLEOF'
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <application
+        android:label="DualLock"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme"/>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2"/>
+    </application>
+</manifest>
+XMLEOF
+
+          cat > android/app/build.gradle << 'GRADLEOF'
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+android {
+    namespace "com.duallock.app"
+    compileSdk 34
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    defaultConfig {
+        applicationId "com.duallock.app"
+        minSdkVersion 26
+        targetSdkVersion 34
+        versionCode 1
+        versionName "1.0"
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+        }
+    }
+}
+flutter {
+    source '../..'
+}
+GRADLEOF
+
+          cat > android/build.gradle << 'ROOTEOF'
+buildscript {
+    ext.kotlin_version = '1.9.0'
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.1.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+ROOTEOF
+
+      - name: Fix security service import
+        run: |
+          sed -i '/flutter_secure_storage/d' lib/services/security_service.dart || true
+          sed -i "s/FlutterSecureStorage/Map/g" lib/services/security_service.dart || true
 
       - name: Get dependencies
         run: flutter pub get
