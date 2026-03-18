@@ -21,26 +21,41 @@ jobs:
         with:
           flutter-version: '3.19.0'
 
-      - name: Extract and Prep
+      - name: Extract and Clean Project
         run: |
           # 1. فك ضغط الملف
           unzip "duallock_project (1).zip" -d temp_folder
-          
-          # 2. البحث عن مجلد المشروع (لأن أحياناً يكون داخل مجلد فرعي)
-          # سنقوم بنقل كل الملفات للمسار الرئيسي
           cp -r temp_folder/duallock/* . || cp -r temp_folder/* . || true
           
-          # 3. إنشاء المجلدات الناقصة لضمان عدم فشل البناء
-          mkdir -p assets/images assets/animations assets/icons lib/widgets
+          # 2. تنظيف ملف pubspec.yaml من Firebase والمكتبات القديمة المسببة للتعارض
+          sed -i '/firebase/d' pubspec.yaml
+          sed -i '/cloud_firestore/d' pubspec.yaml
+          sed -i '/google_sign_in/d' pubspec.yaml
+          
+          # 3. التأكد من وجود المكتبات الأساسية لعمل الأكواد التي أنشأتها يدوياً
+          # سنضيفها في نهاية ملف الـ dependencies لضمان وجودها
+          sed -i '/dependencies:/a \  crypto: ^3.0.3\n  shared_preferences: ^2.2.2\n  google_fonts: ^6.1.0\n  flutter_secure_storage: ^9.0.0' pubspec.yaml
+
+          # 4. إنشاء مجلدات الوسائط (Assets) لضمان عدم فشل التشغيل
+          mkdir -p assets/images assets/animations assets/icons lib/widgets lib/services
+
+      - name: Fix Android Embedding (V2)
+        run: |
+          # هذا السطر يحل مشكلة "Android embedding v2" التي ظهرت لك في الصورة الأخيرة
+          find android -name "AndroidManifest.xml" -exec sed -i '/<activity/a \            <meta-data android:name="flutterEmbedding" android:value="2" />' {} +
 
       - name: Install Dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          # تنظيف الكاش لضمان عدم وجود ملفات قديمة معطلة
+          flutter clean
+          flutter pub get
 
       - name: Build APK
-        run: flutter build apk --release
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: DualLock-App
+          name: DualLock-Final-App
           path: build/app/outputs/flutter-apk/app-release.apk
