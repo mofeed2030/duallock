@@ -3,62 +3,44 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.0'
-      - name: Create Flutter project
+
+      - name: Extract and Prep
         run: |
-          flutter create --org com.duallock --project-name duallock_app newproject
-          cp -r newproject/android ./android
-      - name: Unzip project
-        run: |
-          unzip "duallock_project (1).zip" -d extracted
-          cp -r extracted/duallock/lib ./lib
-          cp extracted/duallock/pubspec.yaml ./pubspec.yaml
-      - name: Restore custom files
-        run: |
-          cp lib/widgets/gradient_button.dart /tmp/gradient_button.dart || true
-          cp lib/services/security_service.dart /tmp/security_service.dart || true
-      - name: Create assets
-        run: mkdir -p assets/images assets/animations assets/icons assets/fonts
-      - name: Fix pubspec
-        run: |
-          sed -i '/firebase/d' pubspec.yaml
-          sed -i '/device_apps/d' pubspec.yaml
-          sed -i '/installed_apps/d' pubspec.yaml
-          sed -i '/local_auth/d' pubspec.yaml
-          sed -i '/photo_manager/d' pubspec.yaml
-          sed -i '/flutter_secure_storage/d' pubspec.yaml
-          sed -i '/assets\/images/d' pubspec.yaml
-          sed -i '/assets\/animations/d' pubspec.yaml
-          sed -i '/assets\/icons/d' pubspec.yaml
-          sed -i '/Cairo/d' pubspec.yaml
-          sed -i '/family:/d' pubspec.yaml
-          sed -i '/weight:/d' pubspec.yaml
-          sed -i '/fonts:/d' pubspec.yaml
-          sed -i '/asset:/d' pubspec.yaml
-          sed -i 's/name: duallock$/name: duallock_app/' pubspec.yaml
-      - name: Restore files after unzip
-        run: |
-          cp /tmp/gradient_button.dart lib/widgets/gradient_button.dart || true
-          cp /tmp/security_service.dart lib/services/security_service.dart || true
-      - name: Get dependencies
+          # 1. فك ضغط الملف
+          unzip "duallock_project (1).zip" -d temp_folder
+          
+          # 2. البحث عن مجلد المشروع (لأن أحياناً يكون داخل مجلد فرعي)
+          # سنقوم بنقل كل الملفات للمسار الرئيسي
+          cp -r temp_folder/duallock/* . || cp -r temp_folder/* . || true
+          
+          # 3. إنشاء المجلدات الناقصة لضمان عدم فشل البناء
+          mkdir -p assets/images assets/animations assets/icons lib/widgets
+
+      - name: Install Dependencies
         run: flutter pub get
+
       - name: Build APK
         run: flutter build apk --release
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: DualLock-APK
+          name: DualLock-App
           path: build/app/outputs/flutter-apk/app-release.apk
