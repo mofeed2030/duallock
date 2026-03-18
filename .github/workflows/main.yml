@@ -32,6 +32,44 @@ jobs:
           cp -r extracted/duallock/lib ./lib
           cp extracted/duallock/pubspec.yaml ./pubspec.yaml
 
+      - name: Create missing widget files
+        run: |
+          mkdir -p lib/widgets
+          cat > lib/widgets/gradient_button.dart << 'EOF'
+          import 'package:flutter/material.dart';
+          class GradientButton extends StatelessWidget {
+            final VoidCallback onPressed;
+            final String text;
+            final IconData? icon;
+            final double? width;
+            final double height;
+            final List<Color>? colors;
+            const GradientButton({super.key, required this.onPressed, required this.text, this.icon, this.width, this.height = 56, this.colors});
+            @override
+            Widget build(BuildContext context) {
+              final gc = colors ?? [const Color(0xFF2979FF), const Color(0xFF448AFF)];
+              return GestureDetector(
+                onTap: onPressed,
+                child: Container(
+                  width: width ?? double.infinity,
+                  height: height,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: gc),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(text, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      if (icon != null) ...[const SizedBox(width: 8), Icon(icon, color: Colors.white, size: 20)],
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+          EOF
+
       - name: Fix pubspec
         run: |
           sed -i '/firebase_core/d' pubspec.yaml
@@ -50,61 +88,45 @@ jobs:
           import 'dart:convert';
           import 'package:crypto/crypto.dart';
           import 'package:shared_preferences/shared_preferences.dart';
-
           class SecurityService {
             static final SecurityService _instance = SecurityService._internal();
             factory SecurityService() => _instance;
             SecurityService._internal();
             static const String _salt = 'DualLock_S3cur3_S@lt_2024';
-
             String hashPattern(String pattern) {
-              final salted = '$_salt:$pattern:$_salt';
-              final bytes = utf8.encode(salted);
-              final digest = sha256.convert(bytes);
-              return digest.toString();
+              final bytes = utf8.encode('$_salt:$pattern:$_salt');
+              return sha256.convert(bytes).toString();
             }
-
-            Future<void> saveRealPattern(String pattern) async {
+            Future<void> saveRealPattern(String p) async {
               final prefs = await SharedPreferences.getInstance();
-              await prefs.setString('real_pattern', hashPattern(pattern));
+              await prefs.setString('real_pattern', hashPattern(p));
             }
-
-            Future<void> saveDecoyPattern(String pattern) async {
+            Future<void> saveDecoyPattern(String p) async {
               final prefs = await SharedPreferences.getInstance();
-              await prefs.setString('decoy_pattern', hashPattern(pattern));
+              await prefs.setString('decoy_pattern', hashPattern(p));
             }
-
-            Future<bool> verifyRealPattern(String pattern) async {
+            Future<bool> verifyRealPattern(String p) async {
               final prefs = await SharedPreferences.getInstance();
-              final stored = prefs.getString('real_pattern');
-              if (stored == null) return false;
-              return stored == hashPattern(pattern);
+              return prefs.getString('real_pattern') == hashPattern(p);
             }
-
-            Future<bool> verifyDecoyPattern(String pattern) async {
+            Future<bool> verifyDecoyPattern(String p) async {
               final prefs = await SharedPreferences.getInstance();
-              final stored = prefs.getString('decoy_pattern');
-              if (stored == null) return false;
-              return stored == hashPattern(pattern);
+              return prefs.getString('decoy_pattern') == hashPattern(p);
             }
-
-            Future<PatternType> checkPattern(String pattern) async {
-              if (await verifyRealPattern(pattern)) return PatternType.real;
-              if (await verifyDecoyPattern(pattern)) return PatternType.decoy;
+            Future<PatternType> checkPattern(String p) async {
+              if (await verifyRealPattern(p)) return PatternType.real;
+              if (await verifyDecoyPattern(p)) return PatternType.decoy;
               return PatternType.invalid;
             }
-
             Future<bool> hasRealPattern() async {
               final prefs = await SharedPreferences.getInstance();
               return prefs.getString('real_pattern') != null;
             }
-
             Future<bool> hasDecoyPattern() async {
               final prefs = await SharedPreferences.getInstance();
               return prefs.getString('decoy_pattern') != null;
             }
           }
-
           enum PatternType { real, decoy, invalid }
           EOF
 
