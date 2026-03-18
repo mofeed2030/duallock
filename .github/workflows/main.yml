@@ -27,28 +27,27 @@ jobs:
           unzip "duallock_project (1).zip" -d temp_folder
           cp -r temp_folder/duallock/* . || cp -r temp_folder/* . || true
           
-          # 2. تنظيف ملف pubspec.yaml من Firebase والمكتبات القديمة المسببة للتعارض
+          # 2. تنظيف ملف pubspec.yaml من التكرارات والمكتبات المتعارضة
+          # سنحذف المكتبات تماماً ثم نعيد إضافتها مرة واحدة فقط لضمان عدم التكرار
           sed -i '/firebase/d' pubspec.yaml
           sed -i '/cloud_firestore/d' pubspec.yaml
-          sed -i '/google_sign_in/d' pubspec.yaml
+          sed -i '/google_fonts/d' pubspec.yaml
+          sed -i '/crypto/d' pubspec.yaml
+          sed -i '/shared_preferences/d' pubspec.yaml
+          sed -i '/flutter_secure_storage/d' pubspec.yaml
           
-          # 3. التأكد من وجود المكتبات الأساسية لعمل الأكواد التي أنشأتها يدوياً
-          # سنضيفها في نهاية ملف الـ dependencies لضمان وجودها
+          # 3. إضافة المكتبات المطلوبة بشكل نظيف تحت قسم dependencies
           sed -i '/dependencies:/a \  crypto: ^3.0.3\n  shared_preferences: ^2.2.2\n  google_fonts: ^6.1.0\n  flutter_secure_storage: ^9.0.0' pubspec.yaml
 
-          # 4. إنشاء مجلدات الوسائط (Assets) لضمان عدم فشل التشغيل
+          # 4. إنشاء مجلدات الوسائط
           mkdir -p assets/images assets/animations assets/icons lib/widgets lib/services
 
-      - name: Fix Android Embedding (V2)
+      - name: Fix Android Embedding
         run: |
-          # هذا السطر يحل مشكلة "Android embedding v2" التي ظهرت لك في الصورة الأخيرة
           find android -name "AndroidManifest.xml" -exec sed -i '/<activity/a \            <meta-data android:name="flutterEmbedding" android:value="2" />' {} +
 
       - name: Install Dependencies
         run: |
-          flutter pub get
-          # تنظيف الكاش لضمان عدم وجود ملفات قديمة معطلة
-          flutter clean
           flutter pub get
 
       - name: Build APK
