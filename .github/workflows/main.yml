@@ -1,0 +1,45 @@
+name: Build Flutter APK
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Unzip project
+        run: |
+          unzip "duallock_project (1).zip" -d extracted
+          cp -r extracted/duallock/. .
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+
+      - name: Remove Firebase deps
+        run: |
+          sed -i '/firebase_core/d' pubspec.yaml
+          sed -i '/firebase_auth/d' pubspec.yaml
+          sed -i '/cloud_firestore/d' pubspec.yaml
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release --no-sound-null-safety
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: DualLock-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
