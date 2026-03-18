@@ -31,8 +31,13 @@ jobs:
           cp -r extracted/duallock/lib ./lib
           cp extracted/duallock/pubspec.yaml ./pubspec.yaml
 
+      - name: Restore custom files
+        run: |
+          cp lib/widgets/gradient_button.dart /tmp/gradient_button.dart || true
+          cp lib/services/security_service.dart /tmp/security_service.dart || true
+
       - name: Create assets
-        run: mkdir -p assets/images assets/animations assets/icons assets/fonts lib/widgets
+        run: mkdir -p assets/images assets/animations assets/icons assets/fonts
 
       - name: Fix pubspec
         run: |
@@ -50,63 +55,10 @@ jobs:
           sed -i '/weight:/d' pubspec.yaml
           sed -i 's/name: duallock$/name: duallock_app/' pubspec.yaml
 
-      - name: Write gradient button
-        run: python3 -c "
-import os
-os.makedirs('lib/widgets', exist_ok=True)
-code = '''import \"package:flutter/material.dart\";
-class GradientButton extends StatelessWidget {
-  final VoidCallback onPressed;
-  final String text;
-  final IconData? icon;
-  final double height;
-  const GradientButton({super.key, required this.onPressed, required this.text, this.icon, this.height = 56});
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        width: double.infinity,
-        height: height,
-        decoration: BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF2979FF), Color(0xFF448AFF)]), borderRadius: BorderRadius.circular(16)),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text(text, style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-          if (icon != null) ...[SizedBox(width: 8), Icon(icon, color: Colors.white, size: 20)],
-        ]),
-      ),
-    );
-  }
-}'''
-open('lib/widgets/gradient_button.dart', 'w').write(code)
-"
-
-      - name: Write security service
-        run: python3 -c "
-import os
-code = '''import \"dart:convert\";
-import \"package:crypto/crypto.dart\";
-import \"package:shared_preferences/shared_preferences.dart\";
-class SecurityService {
-  static final SecurityService _i = SecurityService._();
-  factory SecurityService() => _i;
-  SecurityService._();
-  static const _s = \"DualLock_Salt_2024\";
-  String hash(String p) => sha256.convert(utf8.encode(\"\$_s:\$p:\$_s\")).toString();
-  Future<void> saveRealPattern(String p) async => (await SharedPreferences.getInstance()).setString(\"real\", hash(p));
-  Future<void> saveDecoyPattern(String p) async => (await SharedPreferences.getInstance()).setString(\"decoy\", hash(p));
-  Future<bool> verifyRealPattern(String p) async => (await SharedPreferences.getInstance()).getString(\"real\") == hash(p);
-  Future<bool> verifyDecoyPattern(String p) async => (await SharedPreferences.getInstance()).getString(\"decoy\") == hash(p);
-  Future<PatternType> checkPattern(String p) async {
-    if (await verifyRealPattern(p)) return PatternType.real;
-    if (await verifyDecoyPattern(p)) return PatternType.decoy;
-    return PatternType.invalid;
-  }
-  Future<bool> hasRealPattern() async => (await SharedPreferences.getInstance()).getString(\"real\") != null;
-  Future<bool> hasDecoyPattern() async => (await SharedPreferences.getInstance()).getString(\"decoy\") != null;
-}
-enum PatternType { real, decoy, invalid }'''
-open('lib/services/security_service.dart', 'w').write(code)
-"
+      - name: Restore files after unzip
+        run: |
+          cp /tmp/gradient_button.dart lib/widgets/gradient_button.dart || true
+          cp /tmp/security_service.dart lib/services/security_service.dart || true
 
       - name: Get dependencies
         run: flutter pub get
