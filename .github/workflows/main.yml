@@ -9,9 +9,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unzip project
-        run: unzip "duallock_project (1).zip" -d extracted && cp -r extracted/duallock/. .
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -23,6 +20,18 @@ jobs:
         with:
           flutter-version: '3.19.0'
 
+      - name: Create new Flutter project
+        run: |
+          flutter create --org com.duallock --project-name duallock_app newproject
+          cp -r newproject/android ./android
+          cp -r newproject/ios ./ios || true
+
+      - name: Unzip and copy lib files
+        run: |
+          unzip "duallock_project (1).zip" -d extracted
+          cp -r extracted/duallock/lib ./lib
+          cp extracted/duallock/pubspec.yaml ./pubspec.yaml
+
       - name: Fix pubspec
         run: |
           sed -i '/firebase_core/d' pubspec.yaml
@@ -33,36 +42,71 @@ jobs:
           sed -i '/local_auth/d' pubspec.yaml
           sed -i '/photo_manager/d' pubspec.yaml
           sed -i '/flutter_secure_storage/d' pubspec.yaml
+          sed -i 's/name: duallock/name: duallock_app/' pubspec.yaml
 
-      - name: Fix Android MainActivity
+      - name: Fix security service
         run: |
-          mkdir -p android/app/src/main/java/com/duallock/app
-          printf 'package com.duallock.app\nimport io.flutter.embedding.android.FlutterActivity\nclass MainActivity: FlutterActivity()' > android/app/src/main/java/com/duallock/app/MainActivity.kt
+          cat > lib/services/security_service.dart << 'EOF'
+          import 'dart:convert';
+          import 'package:crypto/crypto.dart';
+          import 'package:shared_preferences/shared_preferences.dart';
 
-      - name: Fix AndroidManifest
-        run: |
-          printf '<?xml version="1.0" encoding="utf-8"?>\n<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n<uses-permission android:name="android.permission.INTERNET"/>\n<application android:label="DualLock" android:name="${applicationName}" android:icon="@mipmap/ic_launcher">\n<activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">\n<meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>\n<intent-filter>\n<action android:name="android.intent.action.MAIN"/>\n<category android:name="android.intent.category.LAUNCHER"/>\n</intent-filter>\n</activity>\n<meta-data android:name="flutterEmbedding" android:value="2"/>\n</application>\n</manifest>' > android/app/src/main/AndroidManifest.xml
+          class SecurityService {
+            static final SecurityService _instance = SecurityService._internal();
+            factory SecurityService() => _instance;
+            SecurityService._internal();
+            static const String _salt = 'DualLock_S3cur3_S@lt_2024';
 
-      - name: Fix app build.gradle
-        run: |
-          printf 'plugins {\n    id "com.android.application"\n    id "kotlin-android"\n    id "dev.flutter.flutter-gradle-plugin"\n}\nandroid {\n    namespace "com.duallock.app"\n    compileSdk 34\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n    kotlinOptions { jvmTarget = "17" }\n    defaultConfig {\n        applicationId "com.duallock.app"\n        minSdkVersion 26\n        targetSdkVersion 34\n        versionCode 1\n        versionName "1.0"\n    }\n    buildTypes {\n        release { signingConfig signingConfigs.debug }\n    }\n}\nflutter { source "../.." }' > android/app/build.gradle
+            String hashPattern(String pattern) {
+              final salted = '$_salt:$pattern:$_salt';
+              final bytes = utf8.encode(salted);
+              final digest = sha256.convert(bytes);
+              return digest.toString();
+            }
 
-      - name: Fix root build.gradle
-        run: |
-          printf 'buildscript {\n    ext.kotlin_version = "1.9.0"\n    repositories { google()\n        mavenCentral() }\n    dependencies {\n        classpath "com.android.tools.build:gradle:8.1.0"\n        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"\n    }\n}\nallprojects { repositories { google()\n    mavenCentral() } }' > android/build.gradle
+            Future<void> saveRealPattern(String pattern) async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('real_pattern', hashPattern(pattern));
+            }
 
-      - name: Fix settings.gradle
-        run: |
-          printf 'include ":app"\n\ndef localPropertiesFile = new File(rootProject.projectDir, "local.properties")\ndef properties = new Properties()\n\nassert localPropertiesFile.exists()\nlocalPropertiesFile.withReader("UTF-8") { reader -> properties.load(reader) }\n\ndef flutterSdkPath = properties.getProperty("flutter.sdk")\nassert flutterSdkPath != null, "flutter.sdk not set in local.properties"\napply from: "$flutterSdkPath/packages/flutter_tools/gradle/app_plugin_loader.gradle"' > android/settings.gradle
+            Future<void> saveDecoyPattern(String pattern) async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('decoy_pattern', hashPattern(pattern));
+            }
 
-      - name: Fix gradle wrapper
-        run: |
-          mkdir -p android/gradle/wrapper
-          printf 'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.0-all.zip\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists' > android/gradle/wrapper/gradle-wrapper.properties
+            Future<bool> verifyRealPattern(String pattern) async {
+              final prefs = await SharedPreferences.getInstance();
+              final stored = prefs.getString('real_pattern');
+              if (stored == null) return false;
+              return stored == hashPattern(pattern);
+            }
 
-      - name: Fix gradle properties
-        run: |
-          printf 'org.gradle.jvmargs=-Xmx4G\nandroid.useAndroidX=true\nandroid.enableJetifier=true' > android/gradle.properties
+            Future<bool> verifyDecoyPattern(String pattern) async {
+              final prefs = await SharedPreferences.getInstance();
+              final stored = prefs.getString('decoy_pattern');
+              if (stored == null) return false;
+              return stored == hashPattern(pattern);
+            }
+
+            Future<PatternType> checkPattern(String pattern) async {
+              if (await verifyRealPattern(pattern)) return PatternType.real;
+              if (await verifyDecoyPattern(pattern)) return PatternType.decoy;
+              return PatternType.invalid;
+            }
+
+            Future<bool> hasRealPattern() async {
+              final prefs = await SharedPreferences.getInstance();
+              return prefs.getString('real_pattern') != null;
+            }
+
+            Future<bool> hasDecoyPattern() async {
+              final prefs = await SharedPreferences.getInstance();
+              return prefs.getString('decoy_pattern') != null;
+            }
+          }
+
+          enum PatternType { real, decoy, invalid }
+          EOF
 
       - name: Get dependencies
         run: flutter pub get
