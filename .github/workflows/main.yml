@@ -8,37 +8,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.0'
-
       - name: Create Flutter project
         run: |
           flutter create --org com.duallock --project-name duallock_app newproject
           cp -r newproject/android ./android
-
       - name: Unzip project
         run: |
           unzip "duallock_project (1).zip" -d extracted
           cp -r extracted/duallock/lib ./lib
           cp extracted/duallock/pubspec.yaml ./pubspec.yaml
-
       - name: Restore custom files
         run: |
           cp lib/widgets/gradient_button.dart /tmp/gradient_button.dart || true
           cp lib/services/security_service.dart /tmp/security_service.dart || true
-
       - name: Create assets
         run: mkdir -p assets/images assets/animations assets/icons assets/fonts
-
       - name: Fix pubspec
         run: |
           sed -i '/firebase/d' pubspec.yaml
@@ -53,19 +46,17 @@ jobs:
           sed -i '/Cairo/d' pubspec.yaml
           sed -i '/family:/d' pubspec.yaml
           sed -i '/weight:/d' pubspec.yaml
+          sed -i '/fonts:/d' pubspec.yaml
+          sed -i '/asset:/d' pubspec.yaml
           sed -i 's/name: duallock$/name: duallock_app/' pubspec.yaml
-
       - name: Restore files after unzip
         run: |
           cp /tmp/gradient_button.dart lib/widgets/gradient_button.dart || true
           cp /tmp/security_service.dart lib/services/security_service.dart || true
-
       - name: Get dependencies
         run: flutter pub get
-
       - name: Build APK
         run: flutter build apk --release
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
